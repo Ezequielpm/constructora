@@ -1,0 +1,24 @@
+La constructora “La roca bonita”, en su objetivo de mejorar la eficiencia y control de sus operaciones, solicita el desarrollo de un sistema distribuido de gestión de proyectos que permita llevar un control detallado de cada solicitud, proyecto aceptado, supervisión y semaforización de prioridades.
+
+Este sistema será desarrollado en el contexto de la materia de Programación Distribuida y en Paralelo, utilizando la librería mpi.h para la distribución y paralelización de tareas, y el sistema gestor de base de datos PostgreSQL para el almacenamiento estructurado y consultas eficientes de la información.
+
+El proceso a sistematizar es el siguiente:
+
+
+a)	Solicitud de proyecto: datos de la empresa solicitante, fecha, monto del presupuesto, monto del anticipo, folio de la solicitud, estado (aperturado, aceptado, cancelado)
+
+
+b)	Lista de proyectos aceptados: Número de proyecto aceptado, fecha de inicio, fecha de fin, numero del cliente, monto, estatus (en proceso o terminado), porcentaje de avance. 
+
+
+c)	Semaforización de proyectos por orden de prioridad (rojo- prioridad alta, naranja - prioridad media y amarillo - prioridad baja)
+
+
+d)	Control de los supervisores encargados de cada proyecto.
+
+Reportes a generar
+Lista de los proyectos aceptados en cierto periodo de tiempo.
+Datos de los Proyectos que se encuentran con un porcentaje de avance de mas del 50%
+Empresas a las que se les han cancelado los proyectos
+Datos del supervisor de los proyectos con menos del 20% de avance
+Datos de los proyectos aceptados
