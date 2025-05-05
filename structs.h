@@ -1,3 +1,5 @@
+#ifndef STRUCTS_H
+#define STRUCTS_H
 typedef struct {
     int id;
     char nombre[100]; 
@@ -41,3 +43,5 @@ typedef struct {
     char prioridad[15];     //'ROJO', 'NARANJA', 'AMARILLO'
     int id_supervisor;
 } ProyectoAceptado;
+
+#endif /* STRUCTS_H */

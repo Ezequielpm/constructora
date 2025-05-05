@@ -1,11 +1,11 @@
 
 Compilar sin MPI (para pruebas):
 
-	gcc -o laRocaBonita main.c validacion.c empresa.c base_de_datos.c lectura.c solicitud.c supervisor.c proyecto.c -I/Library/PostgreSQL/16/include -L/Library/PostgreSQL/16/lib -lpq
+	gcc -o laRocaBonita validacion.c empresa.c base_de_datos.c lectura.c solicitud.c supervisor.c proyecto.c reportes.c main_actualizado.c -I/Library/PostgreSQL/16/include -L/Library/PostgreSQL/16/lib -lpq
 	
 
 Compilar con MPI:
 
-	mpicc -o laRocaBonita main_con_mpi.c validacion.c empresa.c base_de_datos.c lectura.c solicitud.c supervisor.c -I/Library/PostgreSQL/16/include -L/Library/PostgreSQL/16/lib -lpq
+	mpicc -o laRocaBonita validacion.c empresa.c base_de_datos.c lectura.c solicitud.c proyecto.c supervisor.c reportes.c main_con_mpi.c  -I/Library/PostgreSQL/16/include -L/Library/PostgreSQL/16/lib -lpq
 
 Nombre de ejecutable: laRocaBonita

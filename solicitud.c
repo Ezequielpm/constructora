@@ -3,7 +3,7 @@
 #include "lectura.h"    //para leerEntrada
 #include "validacion.h" //para validadores (esNumeroEnteroPositivoValido, esFechaValida, esDecimalValido, etc.)
 #include "empresa.h"    //para mostrarEmpresas()
-
+#include "supervisor.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
