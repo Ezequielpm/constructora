@@ -1,7 +1,7 @@
 #include "lectura.h"
 #include <stdio.h>  //para printf, fgets, getchar
 #include <string.h> //para strlen, strcspn
-
+#include <stdbool.h>
 /**
  * @brief Muestra un mensaje, lee y valida la entrada del usuario.
  */
@@ -13,7 +13,6 @@ void leerEntrada(const char* mensajePrompt, char* bufferDestino, int tamanoBuffe
         //mostrar el mensaje al usuario
         printf("%s ", mensajePrompt);
         fflush(stdout); //asegurar que el mensaje se muestre antes de esperar la entrada
-
         //leer la entrada de forma segura
         resultadoFgets = fgets(bufferDestino, tamanoBuffer, stdin);
 
@@ -38,7 +37,9 @@ void leerEntrada(const char* mensajePrompt, char* bufferDestino, int tamanoBuffe
             entradaValida = funcionValidadora(bufferDestino);
 
             if (!entradaValida) {
-                printf("Entrada inválida. Por favor, intente de nuevo.\n");
+                printf("\nEntrada inválida. Por favor, intente de nuevo.\n");
+                fflush(stdout); 
+
             }
 
         } else {

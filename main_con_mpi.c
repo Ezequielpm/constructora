@@ -4,20 +4,20 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ctype.h> // para tolower
+#include <unistd.h>
 
-// --- Includes de módulos ---
-
+// Includes de módulos 
 #include "base_de_datos.h"
 #include "lectura.h"
 #include "validacion.h"
 #include "structs.h"
-#include "empresa.h"     // <--- Necesitamos los prototipos ejecutar...DB
+#include "empresa.h"     
 #include "supervisor.h"
 #include "solicitud.h"
-// #include "proyecto.h" // <-- Incluir cuando se implementen tareas
-// #include "reportes.h" // <-- Incluir cuando se implementen tareas
+// #include "proyecto.h" //incluir cuando se implementen tareas
+// #include "reportes.h" //incluir cuando se implementen tareas
 
-// --- Códigos de Tarea para MPI ---
+// Códigos de Tarea para MPI
 #define TAG_TAREA 1
 #define TAG_RESULTADO 2
 #define TAG_DATOS 3
@@ -30,44 +30,36 @@
 #define TAREA_MOSTRAR_EMPRESAS 2
 #define TAREA_ACTUALIZAR_EMPRESA 3
 #define TAREA_ELIMINAR_EMPRESA 4
-// tareas supervisor
+// tareas supervisor (pendientes de implementar ejecutar...DB y lógica mpi)
 #define TAREA_REGISTRAR_SUPERVISOR 11
 #define TAREA_MOSTRAR_SUPERVISORES 12
 #define TAREA_ACTUALIZAR_SUPERVISOR 13
 #define TAREA_ELIMINAR_SUPERVISOR 14
-// tareas solicitud
+// tareas solicitud (pendientes de implementar ejecutar...DB y lógica mpi)
 #define TAREA_REGISTRAR_SOLICITUD 21
 #define TAREA_MOSTRAR_SOLICITUDES 22
 #define TAREA_CANCELAR_SOLICITUD 23
-#define TAREA_ACEPTAR_SOLICITUD 24 // <-- añadir más adelante
-// tareas proyecto aceptado
-#define TAREA_MOSTRAR_PROYECTOS 31 // <-- añadir más adelante
-#define TAREA_ACTUALIZAR_AVANCE 32 // <-- añadir más adelante
-#define TAREA_ACTUALIZAR_PRIORIDAD 33 // <-- añadir más adelante
-#define TAREA_TERMINAR_PROYECTO 34 // <-- añadir más adelante
-#define TAREA_REASIGNAR_SUPERVISOR 35 // <-- añadir más adelante
-// tareas reportes
-// ... definir códigos para reportes ...
+#define TAREA_ACEPTAR_SOLICITUD 24
+// ......
 
-// --- Declaraciones de Funciones de Menú (Prototipos) ---
+
+//Declaraciones de Funciones de Menú (Prototipos)
 void mostrarMenuPrincipal();
 void mostrarMenuEmpresas();
 void mostrarMenuSupervisores();
 void mostrarMenuSolicitudes();
-// void mostrarMenuProyectosAceptados(); // <-- añadir más adelante
-// void mostrarMenuReportes();          // <-- añadir más adelante
+// ... prototipos para proyecto y reportes ...
 
-void procesarOpcionPrincipal(int opcion, PGconn *conn_rank0, int commSize, int rank0, int *contadorTareas); // pasar contador
-// las siguientes ahora solo se usan para np=1
+void procesarOpcionPrincipal(int opcion, PGconn *conn_rank0, int commSize, int rank0, int *contadorTareas);
+// versiones locales para np=1
 void procesarOpcionEmpresasLocal(int opcion, PGconn *conn);
 void procesarOpcionSupervisoresLocal(int opcion, PGconn *conn);
 void procesarOpcionSolicitudesLocal(int opcion, PGconn *conn);
-// void procesarOpcionProyectosAceptadosLocal(int opcion, PGconn *conn); // <-- añadir más adelante
-// void procesarOpcionReportesLocal(int opcion, PGconn *conn);          // <-- añadir más adelante
+// ... (prototipos para proyecto y reportes locales) ...
 
 
-// --- Funciones de Menú (Mostrar - sin cambios) ---
-// (Copiar aquí mostrarMenuPrincipal, mostrarMenuEmpresas, mostrarMenuSupervisores, mostrarMenuSolicitudes)
+//Funciones de Menú
+//Copiar/Mantener mostrarMenuPrincipal, mostrarMenuEmpresas, etc. aquí
 void mostrarMenuPrincipal() {
     printf("\n===== CONSTRUCTORA LA ROCA BONITA - MENÚ PRINCIPAL (MPI) =====\n");
     printf("[1] Gestionar Empresas\n");
@@ -76,6 +68,7 @@ void mostrarMenuPrincipal() {
     printf("[4] Gestionar Proyectos Aceptados (Pendiente)\n");
     printf("[5] Generar Reportes (Pendiente)\n");
     printf("[6] Salir\n");
+    //printf("Seleccione una opción:\n");
     printf("======================================================\n");
 }
 
@@ -104,218 +97,223 @@ void mostrarMenuSolicitudes() {
     printf("[1] Registrar Nueva Solicitud\n");
     printf("[2] Mostrar Solicitudes por Estado\n");
     printf("[3] Cancelar Solicitud (Estado APERTURADO)\n");
-    // printf("[4] Aceptar Solicitud (Crear Proyecto)\n"); // <-- añadir más adelante
-    printf("[4] Volver al Menú Principal\n"); // <-- temporalmente volver es 4
+    // printf("[4] Aceptar Solicitud (Crear Proyecto)\n"); //se añadirá cuando se implemente
+    printf("[4] Volver al Menú Principal\n"); //temporalmente volver es 4
     printf("------------------------------------\n");
 }
 
-// --- Función Principal ---
+
+// Función Principal
 int main(int argc, char *argv[]) {
     int rank, size;
     PGconn *conexion = NULL;
     bool salir = false;
-    MPI_Status status; // para recibir
-    int contadorTareas = 0; // para round-robin simple
+    MPI_Status status;
+    int contadorTareas = 0;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    // Conexión BD (Cada Rank)
+    // (modificar conectarDB para que no imprima en éxito, o ignorar)
     conexion = conectarDB();
 
     if (conexion == NULL) {
         fprintf(stderr, "Rank %d: Fallo al conectar a la BD. Abortando.\n", rank);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
+     // solo rank 0 informa del éxito general de la conexión
+     if (rank == 0) {
+         // printf("Rank 0: Conexión a BD establecida.\n");
+     }
 
-    // --- Lógica Principal Dividida por Rank ---
+
+
+    // Lógica Principal Dividida por Rank 
     if (rank == 0) {
-        // --- Rank 0: Coordinador / UI ---
-        printf("Coordinador (Rank 0) iniciado. Trabajadores activos: %d\n", (size > 1 ? size - 1 : 0) );
+        // Rank 0: Coordinador / UI 
+        if(size > 1) {
+            printf("Coordinador (Rank 0) iniciado. Trabajadores activos: %d\n", size - 1);
+        } else {
+            printf("Ejecutando en modo local (1 solo proceso).\n");
+        }
         char opcionStr[5];
         int opcionSeleccionada;
 
         while (!salir) {
+            //usleep(10000);
             mostrarMenuPrincipal();
+            //usleep(10000);
+
+            fflush(stdout);
             leerEntrada("Seleccione una opción:", opcionStr, sizeof(opcionStr), esNumeroEnteroPositivoValido);
             opcionSeleccionada = atoi(opcionStr);
 
-            if (opcionSeleccionada == 6) { // Opción Salir
+            if (opcionSeleccionada == 6) { //salir
                 salir = true;
                 if (size > 1) {
-                    // Enviar señal de terminar a TODOS los trabajadores (1 a size-1)
                     int tareaTerminar = TAREA_TERMINAR;
-                    printf("Rank 0: Enviando TAREA_TERMINAR a todos los trabajadores...\n");
+                    // printf("Rank 0: Enviando TAREA_TERMINAR a todos los trabajadores...\n"); 
                     for(int i = 1; i < size; i++) {
                         MPI_Send(&tareaTerminar, 1, MPI_INT, i, TAG_TAREA, MPI_COMM_WORLD);
                     }
                 }
             } else if (opcionSeleccionada > 0 && opcionSeleccionada < 6) {
-                procesarOpcionPrincipal(opcionSeleccionada, conexion, size, rank, &contadorTareas); // <--- Pasar contador
+                procesarOpcionPrincipal(opcionSeleccionada, conexion, size, rank, &contadorTareas);
             } else {
                  printf("Opción no válida. Por favor, intente de nuevo.\n");
             }
 
-            // Pausa simple (solo en Rank 0)
+            // pausa simple (solo en rank 0)
             if (!salir && opcionSeleccionada != 6) {
                  printf("\n(Rank 0) Presione Enter para continuar...");
                  int c; while ((c = getchar()) != '\n' && c != EOF);
                  getchar();
             }
-        } // Fin while (!salir) Rank 0
+        } // fin while (!salir) rank 0
 
-    } else { // --- Ranks > 0: Trabajadores ---
-        printf("Trabajador (Rank %d) iniciado y esperando tareas...\n", rank);
+    } else { // Ranks > 0: Trabajadores
+        // printf("Trabajador (Rank %d) iniciado y esperando tareas...\n", rank);
         int tareaRecibida;
-        int resultadoOperacion = 0; // 0 = Éxito, -1 = Error DB, -2 = No encontrado/0 filas
+        int resultadoOperacion = 0;
 
         while (true) {
-            // Esperar tarea de Rank 0
             MPI_Recv(&tareaRecibida, 1, MPI_INT, 0, TAG_TAREA, MPI_COMM_WORLD, &status);
-            // printf("Rank %d: Tarea recibida = %d\n", rank, tareaRecibida); // Descomentar para depurar
+            // printf("Rank %d: Tarea recibida = %d\n", rank, tareaRecibida); 
 
-            resultadoOperacion = 0; // Resetear
+            resultadoOperacion = 0; //resetear
 
             if (tareaRecibida == TAREA_TERMINAR) {
-                printf("Rank %d: Recibida señal de terminar. Saliendo...\n", rank);
-                break; // Salir del bucle while(true)
+                // printf("Rank %d: Recibida señal de terminar. Saliendo...\n", rank);
+                break;
             }
 
-            // Ejecutar la tarea solicitada
+            // ejecutar la tarea solicitada
             switch (tareaRecibida) {
-                // --- EMPRESAS ---
+                //EMPRESAS
                 case TAREA_REGISTRAR_EMPRESA: {
                     Empresa empRecibida;
                     MPI_Recv(&empRecibida, sizeof(Empresa), MPI_BYTE, 0, TAG_DATOS, MPI_COMM_WORLD, &status);
-                    // printf("Rank %d: Registrando empresa '%s'...\n", rank, empRecibida.nombre); // depuración
-                    resultadoOperacion = ejecutarRegistrarEmpresaDB(conexion, &empRecibida); // <--- LLAMADA A FUNCIÓN DB-ONLY
+                    resultadoOperacion = ejecutarRegistrarEmpresaDB(conexion, &empRecibida);
                     MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD);
                     break;
                 }
                 case TAREA_MOSTRAR_EMPRESAS: {
-                    // printf("Rank %d: Ejecutando mostrarEmpresas...\n", rank); // depuración
-                    mostrarEmpresas(conexion); // El trabajador imprime directamente (salida puede mezclarse si np > 2)
-                    resultadoOperacion = 0; // asumimos que mostrar no falla críticamente
-                    MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD);
+                    // no hay datos que recibir
+                    mostrarEmpresas(conexion); // <<<--- trabajador llama a la función original (imprime)
+                    resultadoOperacion = 0; //asumimos éxito si no hay crash
+                    MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD); //envía ack
                     break;
                 }
                 case TAREA_ACTUALIZAR_EMPRESA: {
                     char idRecibido[10];
-                    char campoRecibido[30]; // tamaño razonable para nombre de campo
-                    char valorRecibido[151]; // tamaño del campo más grande (dirección)
+                    char campoRecibido[30];
+                    char valorRecibido[151]; //tamaño del más grande (dirección)
                     MPI_Recv(idRecibido, 10, MPI_CHAR, 0, TAG_DATOS, MPI_COMM_WORLD, &status);
                     MPI_Recv(campoRecibido, 30, MPI_CHAR, 0, TAG_DATOS_EXTRA1, MPI_COMM_WORLD, &status);
                     MPI_Recv(valorRecibido, 151, MPI_CHAR, 0, TAG_DATOS_EXTRA2, MPI_COMM_WORLD, &status);
-                    // printf("Rank %d: Actualizando campo '%s' de empresa ID %s...\n", rank, campoRecibido, idRecibido); // depuración
-                    resultadoOperacion = ejecutarActualizarCampoEmpresaDB(conexion, idRecibido, campoRecibido, valorRecibido); // <--- LLAMADA A FUNCIÓN DB-ONLY
+                    resultadoOperacion = ejecutarActualizarCampoEmpresaDB(conexion, idRecibido, campoRecibido, valorRecibido);
                     MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD);
                     break;
                 }
                  case TAREA_ELIMINAR_EMPRESA: {
                     char idParaEliminar[10];
                     MPI_Recv(idParaEliminar, 10, MPI_CHAR, 0, TAG_DATOS, MPI_COMM_WORLD, &status);
-                    // printf("Rank %d: Eliminando empresa ID %s...\n", rank, idParaEliminar); // depuración
-                    resultadoOperacion = ejecutarEliminarEmpresaDB(conexion, idParaEliminar); // <--- LLAMADA A FUNCIÓN DB-ONLY
+                    resultadoOperacion = ejecutarEliminarEmpresaDB(conexion, idParaEliminar);
                     MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD);
                     break;
                  }
 
-                // --- SUPERVISORES ---
+                //SUPERVISORES
                  case TAREA_MOSTRAR_SUPERVISORES: {
-                    // printf("Rank %d: Ejecutando mostrarSupervisores...\n", rank); // depuración
-                    mostrarSupervisores(conexion); // el trabajador imprime
+                    // no hay datos que recibir
+                    mostrarSupervisores(conexion); // <<<--- trabajador llama a la función original (imprime)
                     resultadoOperacion = 0;
-                    MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD);
+                    MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD); // envía ack
                     break;
                  }
-                 // ... Implementar casos para TAREA_REGISTRAR_SUPERVISOR, TAREA_ACTUALIZAR_SUPERVISOR, TAREA_ELIMINAR_SUPERVISOR
-                 //     llamando a las correspondientes funciones ejecutar...DB que habría que crear en supervisor.c/.h
+                 // ... (Casos para otras tareas de supervisor pendientes de ejecutar...DB y lógica MPI) ...
 
-                // --- SOLICITUDES ---
+                //SOLICITUDES
                  case TAREA_MOSTRAR_SOLICITUDES: {
                     char estadoSolicitado[20];
                     MPI_Recv(estadoSolicitado, 20, MPI_CHAR, 0, TAG_DATOS, MPI_COMM_WORLD, &status);
-                    // printf("Rank %d: Mostrando solicitudes con estado '%s'...\n", rank, estadoSolicitado); // depuración
-                    // mostrarSolicitudesPorEstado(conexion); // ¡Necesitaría refactorización para tomar estado!
-                    // Crear una función ejecutarMostrarSolicitudesDB(conn, estado) o refactorizar la original
-                    printf("Rank %d: (Simulado) Mostrando solicitudes '%s'.\n", rank, estadoSolicitado);
-                    resultadoOperacion = 0;
+                    //necesitaríamos refactorizar o crear ejecutarMostrarSolicitudesDB(conn, estado)
+                    //por ahora, simular o llamar a la original si se adapta:
+                    printf("Rank %d: (Simulado) Mostrando solicitudes '%s'...\n", rank, estadoSolicitado);
+                    // mostrarSolicitudesPorEstado(conexion); // <-- Esta pide input, No usar.
+                                                            //se necesita una función nueva o refactorizada.
+                    resultadoOperacion = -1; // indica que esta parte falta
                     MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD);
                     break;
                  }
-                 // ... Implementar casos para TAREA_REGISTRAR_SOLICITUD, TAREA_CANCELAR_SOLICITUD, TAREA_ACEPTAR_SOLICITUD
-                 //     llamando a las correspondientes funciones ejecutar...DB que habría que crear en solicitud.c/.h
+                 // ... (Casos para otras tareas de solicitud pendientes de ejecutar...DB y lógica MPI) ...
 
-                 // ... Implementar casos para PROYECTOS y REPORTES ...
-
-
+                 // ... (Casos para PROYECTOS y REPORTES pendientes) ...
                 default:
                     fprintf(stderr, "Rank %d: Tarea desconocida recibida: %d\n", rank, tareaRecibida);
-                    resultadoOperacion = -1; // Indicar error
+                    resultadoOperacion = -1; // indicar error
                     MPI_Send(&resultadoOperacion, 1, MPI_INT, 0, TAG_RESULTADO, MPI_COMM_WORLD);
                     break;
-            } // Fin switch(tareaRecibida)
-        } // Fin while(true) trabajador
+            } // fin switch(tareaRecibida)
+        } // fin while(true) trabajador
 
-    } // Fin else (trabajadores)
+    } // fin else (trabajadores)
 
-    // --- Sincronización y Finalización ---
-    MPI_Barrier(MPI_COMM_WORLD);
+    //Sincronización y Finalización
+    MPI_Barrier(MPI_COMM_WORLD); // esperar a todos
 
     if (conexion != NULL) {
-        // printf("Rank %d: Desconectando de la BD...\n", rank); // Puede ser mucho output
         desconectarDB(conexion);
     }
 
-    // printf("Rank %d: Finalizando MPI...\n", rank); // Puede ser mucho output
     MPI_Finalize();
 
     return 0;
 }
 
 
-// --- Implementación de Funciones de Procesamiento de Opciones (MODIFICADAS para MPI) ---
+// Implementación de funciones de procesamiento de opciones
 
 // procesa opciones del menú principal (EJECUTADO SOLO EN RANK 0)
 void procesarOpcionPrincipal(int opcion, PGconn* conn_rank0, int commSize, int rank0_siempre_cero, int *contadorTareas) {
-    // nota: conn_rank0 solo se usa si commSize == 1
+    // conn_rank0 solo se usa si commSize == 1
     char opcionSubMenuStr[5];
     int opcionSubMenu;
     int tareaAEnviar;
     int resultadoRecibido;
-    double tInicio=0.0, tFin=0.0; // para timing
+    double tInicio=0.0, tFin=0.0;
 
-    // determinar el rank del trabajador (round-robin simple si hay trabajadores)
-    int rankTrabajador = 0; // por defecto, local si size es 1
+    // determinar trabajador (round-robin simple si hay trabajadores)
+    int rankTrabajador = 0; //ejecución local por defecto
     if (commSize > 1) {
         rankTrabajador = (*contadorTareas % (commSize - 1)) + 1;
-        (*contadorTareas)++; // incrementar para la próxima tarea
+        (*contadorTareas)++;
     }
-
-    // printf("Rank 0: Delegando tarea a Rank %d (commSize=%d)\n", rankTrabajador, commSize); // depuración
 
     switch (opcion) {
         case 1: // Empresas
             do {
-                mostrarMenuEmpresas(); // Rank 0 siempre muestra menú
-                leerEntrada("Seleccione una opción del menú Empresas:", opcionSubMenuStr, sizeof(opcionSubMenuStr), esNumeroEnteroPositivoValido);
+                mostrarMenuEmpresas(); // rank 0 muestra menú
+                leerEntrada("Seleccione opción Empresas:", opcionSubMenuStr, sizeof(opcionSubMenuStr), esNumeroEnteroPositivoValido);
                 opcionSubMenu = atoi(opcionSubMenuStr);
-                if (opcionSubMenu == 5) break; // Volver
+                if (opcionSubMenu == 5) break; // volver
 
-                 if (rankTrabajador == 0) { // --- EJECUCIÓN LOCAL (NP=1) ---
+                 if (rankTrabajador == 0) { // EJECUCIÓN LOCAL (NP=1) 
                      printf("Ejecutando localmente (Rank 0)...\n");
                      tInicio = MPI_Wtime();
-                     procesarOpcionEmpresasLocal(opcionSubMenu, conn_rank0); // Llamada directa a la version local
+                     procesarOpcionEmpresasLocal(opcionSubMenu, conn_rank0);
                      tFin = MPI_Wtime();
-                     printf("Tiempo de ejecución local: %.4f segundos\n", tFin - tInicio);
-                 } else { // --- DELEGAR A RANK TRABAJADOR (NP > 1) ---
+                     printf("Tiempo ejecución local: %.4f seg\n", tFin - tInicio);
+                 } else { // SE DELEGA A RANK TRABAJADOR (NP > 1)
                      bool tareaValidaParaEnviar = true;
-                     // --- lógica para preparar y enviar tarea de empresa ---
+                     // logica para preparar y enviar tarea de empresa
                      switch(opcionSubMenu) {
                          case 1: { // registrar empresa
                                 tareaAEnviar = TAREA_REGISTRAR_EMPRESA;
-                                Empresa emp; // estructura temporal para recolectar datos
-                                printf("--- Registro de Nueva Empresa (Datos) ---\n");
+                                Empresa emp;
+                                printf("--- Registro Empresa (Datos) ---\n");
                                 leerEntrada("Nombre:", emp.nombre, sizeof(emp.nombre), noEsVacio);
                                 leerEntrada("Dirección:", emp.direccion, sizeof(emp.direccion), noEsVacio);
                                 leerEntrada("Teléfono:", emp.telefono, sizeof(emp.telefono), sonSoloNumeros);
@@ -326,33 +324,33 @@ void procesarOpcionPrincipal(int opcion, PGconn* conn_rank0, int commSize, int r
                                 tInicio = MPI_Wtime();
                                 MPI_Send(&tareaAEnviar, 1, MPI_INT, rankTrabajador, TAG_TAREA, MPI_COMM_WORLD);
                                 MPI_Send(&emp, sizeof(Empresa), MPI_BYTE, rankTrabajador, TAG_DATOS, MPI_COMM_WORLD);
-                                break;
+                                break; // fin case 1 (registrar)
                             }
                          case 2: { // mostrar empresas
                                 tareaAEnviar = TAREA_MOSTRAR_EMPRESAS;
                                 tInicio = MPI_Wtime();
+                                // printf("Rank 0: Enviando TAREA_MOSTRAR_EMPRESAS a Rank %d\n", rankTrabajador);// debug
                                 MPI_Send(&tareaAEnviar, 1, MPI_INT, rankTrabajador, TAG_TAREA, MPI_COMM_WORLD);
                                 // no se envían datos adicionales
-                                break;
+                                break; // fin case 2 (mostrar)
                             }
                          case 3: { // actualizar empresa
                                 tareaAEnviar = TAREA_ACTUALIZAR_EMPRESA;
                                 char idActualizar[10];
-                                char campoActualizar[30]; // ej: "nombre", "telefono"
-                                char valorActualizar[151]; // tamaño del más grande (dirección)
+                                char campoActualizar[30];
+                                char valorActualizar[151];
                                 char opCampoStr[5];
                                 int opCampo;
 
                                 printf("--- Actualizar Empresa (Datos) ---\n");
-                                // mostrarEmpresas(); // rank 0 no puede llamar a esto si np > 1
                                 printf("(Se recomienda ejecutar 'Mostrar Empresas' primero para ver IDs)\n");
-                                leerEntrada("ID de empresa a actualizar:", idActualizar, sizeof(idActualizar), esNumeroEnteroPositivoValido);
-                                printf("Campo a actualizar: [1]Nombre [2]Dirección [3]Teléfono [4]Correo [5]RFC [6]Contacto\n");
+                                leerEntrada("ID empresa a actualizar:", idActualizar, sizeof(idActualizar), esNumeroEnteroPositivoValido);
+                                printf("Campo: [1]Nombre [2]Dirección [3]Teléfono [4]Correo [5]RFC [6]Contacto\n");
                                 leerEntrada("Opción Campo:", opCampoStr, sizeof(opCampoStr), esNumeroEnteroPositivoValido);
                                 opCampo = atoi(opCampoStr);
 
                                 bool (*validadorCampo)(const char*) = NULL;
-                                switch(opCampo) {
+                                switch(opCampo) { // determinar nombre de campo y validador
                                     case 1: strcpy(campoActualizar, "nombre"); validadorCampo = noEsVacio; break;
                                     case 2: strcpy(campoActualizar, "direccion"); validadorCampo = noEsVacio; break;
                                     case 3: strcpy(campoActualizar, "telefono"); validadorCampo = sonSoloNumeros; break;
@@ -370,20 +368,20 @@ void procesarOpcionPrincipal(int opcion, PGconn* conn_rank0, int commSize, int r
                                     MPI_Send(campoActualizar, 30, MPI_CHAR, rankTrabajador, TAG_DATOS_EXTRA1, MPI_COMM_WORLD);
                                     MPI_Send(valorActualizar, 151, MPI_CHAR, rankTrabajador, TAG_DATOS_EXTRA2, MPI_COMM_WORLD);
                                 }
-                                break;
+                                break; // fin case 3 (actualizar)
                             }
                          case 4: { // eliminar empresa
                                 tareaAEnviar = TAREA_ELIMINAR_EMPRESA;
                                 char idEliminar[10];
                                 char confirmacion[5];
                                 printf("--- Eliminar Empresa ---\n");
-                                // mostrarEmpresas(); // rank 0 no puede
                                 printf("(Se recomienda ejecutar 'Mostrar Empresas' primero para ver IDs)\n");
                                 leerEntrada("ID a eliminar:", idEliminar, sizeof(idEliminar), esNumeroEnteroPositivoValido);
                                 printf("Confirmar eliminación (s/n):");
+                                //se usa fgets para lectura simple de s/n
                                 fgets(confirmacion, sizeof(confirmacion), stdin);
                                 confirmacion[strcspn(confirmacion, "\n")] = '\0';
-                                int c; while ((c = getchar()) != '\n' && c != EOF);
+                                int c; while ((c = getchar()) != '\n' && c != EOF); //limpiar buffer
 
                                 if (tolower(confirmacion[0]) == 's') {
                                         tInicio = MPI_Wtime();
@@ -393,13 +391,14 @@ void procesarOpcionPrincipal(int opcion, PGconn* conn_rank0, int commSize, int r
                                     printf("Cancelado.\n");
                                     tareaValidaParaEnviar = false;
                                 }
-                                break;
+                                break; // fin case 4 (eliminar)
                             }
                          default: printf("Opción inválida.\n"); tareaValidaParaEnviar = false; break;
-                     } // fin switch(opcionSubMenu)
+                     } // fin switch(opcionSubMenu) Empresa
 
-                     // --- recibir resultado del trabajador ---
+                     //  recibir resultado del trabajador (si se envió tarea) 
                      if (tareaValidaParaEnviar) {
+                        // esperar respuesta específica del trabajador asignado
                         MPI_Recv(&resultadoRecibido, 1, MPI_INT, rankTrabajador, TAG_RESULTADO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                         tFin = MPI_Wtime();
                         // interpretar resultado
@@ -409,7 +408,12 @@ void procesarOpcionPrincipal(int opcion, PGconn* conn_rank0, int commSize, int r
                             case -2: printf("Rank 0: Operación ejecutada por Rank %d, pero no afectó filas (ID no encontrado?).\n", rankTrabajador); break;
                             default: printf("Rank 0: Rank %d reportó un resultado desconocido (%d).\n", rankTrabajador, resultadoRecibido); break;
                         }
-                        printf("Tiempo de operación (MPI Send/Recv + Ejecución Rank %d): %.4f segundos\n", rankTrabajador, tFin - tInicio);
+                        // mostrar tiempo solo si la tarea no fue 'mostrar' (cuya duración no es tan relevante aquí)
+                        if(opcionSubMenu != 2) {
+                            printf("Tiempo de operación (MPI Send/Recv + Ejecución Rank %d): %.4f segundos\n", rankTrabajador, tFin - tInicio);
+                        } else {
+                            printf("Tiempo de coordinación (MPI Send/Recv): %.4f segundos\n", tFin - tInicio);
+                        }
                      }
                  } // fin else (delegar)
 
@@ -421,21 +425,32 @@ void procesarOpcionPrincipal(int opcion, PGconn* conn_rank0, int commSize, int r
                  }
 
             } while (opcionSubMenu != 5);
-            break; // Fin case 1 (Empresas)
+            break; // fin case 1 (Empresas)
 
         case 2: // Supervisores
-            // ... (IMPLEMENTAR LÓGICA MPI SIMILAR A EMPRESAS PARA SUPERVISORES) ...
-             printf("Gestión de Supervisores vía MPI pendiente.\n");
+             // --- IMPLEMENTAR LÓGICA MPI PARA SUPERVISORES ---
+             //     (similar a Empresas, usando TAREA_..._SUPERVISOR y
+             //      se necesitará crear ejecutar...DB en supervisor.c)
+             printf("Gestión de Supervisores vía MPI pendiente de implementar.\n");
             break;
 
         case 3: // Solicitudes
-            // ... (IMPLEMENTAR LÓGICA MPI SIMILAR A EMPRESAS PARA SOLICITUDES) ...
-            printf("Gestión de Solicitudes vía MPI pendiente.\n");
+             // --- IMPLEMENTAR LÓGICA MPI PARA SOLICITUDES ---
+             //     (similar a Empresas, usando TAREA_..._SOLICITUD y
+             //      se necesitará crear ejecutar...DB en solicitud.c, y refactorizar/crear
+             //      una función para mostrar solicitudes por estado sin input)
+             printf("Gestión de Solicitudes vía MPI pendiente de implementar.\n");
             break;
 
         case 4: // Proyectos Aceptados
+             // --- IMPLEMENTAR LÓGICA MPI PARA PROYECTOS ---
+             printf("Gestión de Proyectos Aceptados vía MPI pendiente.\n");
+            break;
         case 5: // Reportes
-            printf("Funcionalidad aún no implementada.\n");
+             // --- IMPLEMENTAR LÓGICA MPI PARA REPORTES ---
+             //     (Rank 0 pide parámetros si es necesario, envía tarea/parámetros,
+             //      trabajador llama a función de reporte original (imprime), envía ack)
+             printf("Generación de Reportes vía MPI pendiente.\n");
             break;
         // Caso 6 (Salir) se maneja en el bucle principal de Rank 0
         default:
@@ -445,11 +460,11 @@ void procesarOpcionPrincipal(int opcion, PGconn* conn_rank0, int commSize, int r
 }
 
 
-// --- Funciones de procesamiento de submenús (AHORA SOLO PARA EJECUCIÓN LOCAL SI NP=1) ---
+// --- Funciones de procesamiento de submenús (SOLO PARA EJECUCIÓN LOCAL SI NP=1) ---
 // Renombradas para claridad
 void procesarOpcionEmpresasLocal(int opcion, PGconn *conn) {
     switch (opcion) {
-        case 1: registrarEmpresa(conn); break; // Llama a la original con UI + DB
+        case 1: registrarEmpresa(conn); break;
         case 2: mostrarEmpresas(conn); break;
         case 3: actualizarEmpresa(conn); break;
         case 4: eliminarEmpresa(conn); break;
@@ -459,7 +474,7 @@ void procesarOpcionEmpresasLocal(int opcion, PGconn *conn) {
 
 void procesarOpcionSupervisoresLocal(int opcion, PGconn *conn) {
      switch (opcion) {
-        case 1: registrarSupervisor(conn); break; // Llama a la original con UI + DB
+        case 1: registrarSupervisor(conn); break;
         case 2: mostrarSupervisores(conn); break;
         case 3: actualizarSupervisor(conn); break;
         case 4: eliminarSupervisor(conn); break;
@@ -469,8 +484,8 @@ void procesarOpcionSupervisoresLocal(int opcion, PGconn *conn) {
 
 void procesarOpcionSolicitudesLocal(int opcion, PGconn *conn) {
      switch (opcion) {
-        case 1: registrarSolicitud(conn); break; // Llama a la original con UI + DB
-        case 2: mostrarSolicitudesPorEstado(conn); break;
+        case 1: registrarSolicitud(conn); break;
+        case 2: mostrarSolicitudesPorEstado(conn); break; // <-- Pide input, ok si np=1
         case 3: cancelarSolicitud(conn); break;
         // case 4: aceptarSolicitud(conn); break; // <-- añadir cuando se implemente
         default: printf("Opción local inválida o pendiente.\n"); break;

@@ -25,7 +25,7 @@ PGconn* conectarDB() {
     }
 
     //si llegamos aquí, la conexión fue exitosa
-    printf("Conexión a la base de datos 'constructora' establecida exitosamente.\n");
+   // printf("Conexión a la base de datos 'constructora' establecida exitosamente.\n");
     return nuevaConexion; // devolver el puntero a la conexión
 }
 
