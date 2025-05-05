@@ -2,6 +2,7 @@
 #include <stdio.h>  //para printf, fgets, getchar
 #include <string.h> //para strlen, strcspn
 #include <stdbool.h>
+#include <unistd.h>
 /**
  * @brief Muestra un mensaje, lee y valida la entrada del usuario.
  */
@@ -11,9 +12,11 @@ void leerEntrada(const char* mensajePrompt, char* bufferDestino, int tamanoBuffe
 
     do {
         //mostrar el mensaje al usuario
+
         printf("%s ", mensajePrompt);
         fflush(stdout); //asegurar que el mensaje se muestre antes de esperar la entrada
         //leer la entrada de forma segura
+        printf("\n");// ENCONTRAR QUE LA SOLUCIÓN DE LA SALIDA STDOUT DESORDENADA ERA ESTA LINEA ME TOMÓ UN DIA, NO HAY QUE SUBESTIMAR LOS SALTOS DE LINEA, OJO, NO QUITAR ESE SALTO DE LINEA
         resultadoFgets = fgets(bufferDestino, tamanoBuffer, stdin);
 
         if (resultadoFgets != NULL) {
