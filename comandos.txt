@@ -1,7 +1,7 @@
 
 Compilar sin MPI (para pruebas):
 
-	gcc -o laRocaBonita main.c validacion.c empresa.c base_de_datos.c lectura.c solicitud.c supervisor.c -I/Library/PostgreSQL/16/include -L/Library/PostgreSQL/16/lib -lpq
+	gcc -o laRocaBonita main.c validacion.c empresa.c base_de_datos.c lectura.c solicitud.c supervisor.c proyecto.c -I/Library/PostgreSQL/16/include -L/Library/PostgreSQL/16/lib -lpq
 	
 
 Compilar con MPI:
