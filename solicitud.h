@@ -24,7 +24,14 @@ void mostrarSolicitudesPorEstado(PGconn *conn);
  */
 void cancelarSolicitud(PGconn *conn);
 
-// void aceptarSolicitud(PGconn *conn);
+/**
+ * @brief Acepta una solicitud de proyecto en estado 'APERTURADO', la actualiza
+ * y crea un nuevo registro correspondiente en la tabla 'proyecto_aceptado'.
+ * Solicita al usuario los detalles adicionales necesarios para el proyecto aceptado.
+ * Utiliza una transacción de base de datos.
+ * @param conn Puntero a la conexión activa de PostgreSQL.
+ */
+void aceptarSolicitud(PGconn *conn);
 
 
 #endif // SOLICITUD_H

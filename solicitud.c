@@ -203,3 +203,182 @@ void cancelarSolicitud(PGconn *conn) {
 
     PQclear(resultadoUpdate);
 }
+
+/**
+ * @brief Acepta una solicitud y crea el proyecto correspondiente.
+ */
+void aceptarSolicitud(PGconn *conn) {
+    if (conn == NULL) {
+        fprintf(stderr, "error (aceptarSolicitud): conexión a bd no válida.\n");
+        return;
+    }
+
+    char idSolicitudStr[10];
+    ProyectoAceptado nuevoProyecto; // usaremos los campos char[] para leerEntrada
+    char montoStr[20];
+    char idSupervisorStr[10];
+    char prioridadStr[10]; // "ROJO", "NARANJA", "AMARILLO"
+    char opcionPrioridadStr[5];
+    int opcionPrioridad;
+
+    PGresult *resultado = NULL; // para resultados de consultas
+    bool transaccionOk = true; //bandera para controlar la transacción
+
+    printf("\n--- Aceptar Solicitud y Crear Proyecto ---\n");
+
+    // 1. mostrar solicitudes en estado 'aperturado' para elegir
+    printf("Se mostrarán las solicitudes en estado APERTURADO:\n");
+    // (reutilizamos la lógica/query de cancelarSolicitud para mostrar)
+    const char *estadoAperturado = "APERTURADO";
+    const char *consultaMostrar = "SELECT s.id, s.fecha_solicitud, s.folio, e.nombre AS nombre_empresa "
+                                  "FROM solicitud_proyecto s JOIN empresas e ON s.empresa_id = e.id "
+                                  "WHERE s.estado = $1 ORDER BY s.id;";
+    const char *valoresMostrar[1] = {estadoAperturado};
+    PGresult *resMostrar = PQexecParams(conn, consultaMostrar, 1, NULL, valoresMostrar, NULL, NULL, 0);
+    if (PQresultStatus(resMostrar) == PGRES_TUPLES_OK) {
+        int numFilas = PQntuples(resMostrar);
+         if (numFilas == 0) {
+            printf("No hay solicitudes en estado APERTURADO para aceptar.\n");
+            PQclear(resMostrar);
+            return;
+         }
+         printf("--- Solicitudes APERTURADAS (%d) ---\n", numFilas);
+         printf("| %-4s | %-10s | %-15s | %-25s |\n", "ID", "Fecha Sol.", "Folio", "Empresa");
+         printf("----------------------------------------------------------------\n");
+         for (int i=0; i<numFilas; ++i) {
+             printf("| %-4s | %-10s | %-15s | %-25s |\n",
+                    PQgetvalue(resMostrar, i, 0), PQgetvalue(resMostrar, i, 1),
+                    PQgetvalue(resMostrar, i, 2), PQgetvalue(resMostrar, i, 3));
+         }
+         printf("----------------------------------------------------------------\n");
+    } else {
+        fprintf(stderr,"error al mostrar solicitudes aperturadas: %s\n", PQerrorMessage(conn));
+        // no necesariamente retornamos, el usuario puede intentar ingresar un id de todos modos
+    }
+    PQclear(resMostrar); // limpiar resultado de la muestra
+
+    // 2. pedir id de la solicitud a aceptar
+    leerEntrada("Ingrese el ID de la solicitud a aceptar:", idSolicitudStr, sizeof(idSolicitudStr), esNumeroEnteroPositivoValido);
+
+    // 3. pedir datos para el nuevo proyecto aceptado
+    printf("\n--- Ingrese los datos para el nuevo proyecto aceptado ---\n");
+    leerEntrada("Nombre del Proyecto:", nuevoProyecto.nombre_proyecto, sizeof(nuevoProyecto.nombre_proyecto), noEsVacio);
+    leerEntrada("Fecha de Inicio (YYYY-MM-DD):", nuevoProyecto.fecha_inicio, sizeof(nuevoProyecto.fecha_inicio), esFechaValida);
+    leerEntrada("Fecha de Fin (YYYY-MM-DD):", nuevoProyecto.fecha_fin, sizeof(nuevoProyecto.fecha_fin), esFechaValida);
+    // (validación fecha fin >= fecha inicio omitida por simplicidad)
+    leerEntrada("Monto del Proyecto:", montoStr, sizeof(montoStr), esDecimalValido);
+    leerEntrada("Ubicación del Proyecto:", nuevoProyecto.ubicacion, sizeof(nuevoProyecto.ubicacion), noEsVacio);
+    // la descripción es opcional, se lee directamente con fgets
+    printf("Descripción del Proyecto (opcional, presione Enter para omitir): ");
+    fflush(stdout);
+    fgets(nuevoProyecto.descripcion, sizeof(nuevoProyecto.descripcion), stdin);
+    nuevoProyecto.descripcion[strcspn(nuevoProyecto.descripcion, "\n")] = '\0'; // quitar salto de línea
+    // no limpiar buffer aquí, fgets lo maneja diferente si la línea es larga
+
+    // 4. seleccionar supervisor
+    printf("\nSeleccione el supervisor para el proyecto:\n");
+    mostrarSupervisores(conn); // mostrar lista de supervisores
+    leerEntrada("ID del Supervisor:", idSupervisorStr, sizeof(idSupervisorStr), esNumeroEnteroPositivoValido);
+    // (no validamos si el id existe aquí, la bd lo hará)
+
+    // 5. seleccionar prioridad
+    printf("\nSeleccione la prioridad del proyecto:\n");
+    printf("[1] ROJO (Alta)\n");
+    printf("[2] NARANJA (Media)\n");
+    printf("[3] AMARILLO (Baja)\n");
+    leerEntrada("Opción de Prioridad:", opcionPrioridadStr, sizeof(opcionPrioridadStr), esNumeroEnteroPositivoValido);
+    opcionPrioridad = atoi(opcionPrioridadStr);
+    switch(opcionPrioridad) {
+        case 1: strcpy(prioridadStr, "ROJO"); break;
+        case 2: strcpy(prioridadStr, "NARANJA"); break;
+        case 3: strcpy(prioridadStr, "AMARILLO"); break;
+        default:
+            printf("Opción de prioridad inválida. Se asignará AMARILLO por defecto.\n");
+            strcpy(prioridadStr, "AMARILLO");
+            break;
+    }
+
+    // --- Inicio de la Transacción ---
+    printf("\nIniciando transacción para aceptar solicitud...\n");
+    resultado = PQexec(conn, "BEGIN");
+    if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "error al iniciar transacción: %s\n", PQerrorMessage(conn));
+        PQclear(resultado);
+        return; // no se puede continuar
+    }
+    PQclear(resultado); // limpiar resultado de begin
+
+    // --- Paso 1 de la Transacción: Actualizar Solicitud ---
+    const char *consultaUpdate = "UPDATE solicitud_proyecto SET estado = 'ACEPTADO' "
+                                 "WHERE id = $1 AND estado = 'APERTURADO';";
+    const char *valoresUpdate[1] = {idSolicitudStr};
+
+    resultado = PQexecParams(conn, consultaUpdate, 1, NULL, valoresUpdate, NULL, NULL, 0);
+
+    if (PQresultStatus(resultado) == PGRES_COMMAND_OK) {
+        // verificar si realmente se actualizó una fila
+        char *filasAfectadasStr = PQcmdTuples(resultado);
+        if (filasAfectadasStr == NULL || strcmp(filasAfectadasStr, "1") != 0) {
+            // id no encontrado o no estaba 'aperturado'
+            fprintf(stderr, "error: no se pudo actualizar la solicitud (ID: %s). Verifique que exista y esté en estado APERTURADO.\n", idSolicitudStr);
+            transaccionOk = false; // marcar para rollback
+        } else {
+             printf("Solicitud %s actualizada a ACEPTADO.\n", idSolicitudStr);
+        }
+    } else {
+        fprintf(stderr, "error al actualizar solicitud: %s\n", PQerrorMessage(conn));
+        transaccionOk = false; // marcar para rollback
+    }
+    PQclear(resultado); // limpiar resultado del update
+
+    // --- Paso 2 de la Transacción: Insertar Proyecto Aceptado (solo si el update fue bien) ---
+    if (transaccionOk) {
+        const char *consultaInsert = "INSERT INTO proyecto_aceptado "
+                                     "(solicitud_id, nombre_proyecto, fecha_inicio, fecha_fin, monto, "
+                                     "estatus, porcentaje_avance, ubicacion, descripcion, prioridad, id_supervisor) "
+                                     "VALUES ($1, $2, $3, $4, $5, 'EN_PROCESO', 0.00, $6, $7, $8, $9);";
+        // ¡Son 9 parámetros!
+        const char *valoresInsert[9];
+        valoresInsert[0] = idSolicitudStr;
+        valoresInsert[1] = nuevoProyecto.nombre_proyecto;
+        valoresInsert[2] = nuevoProyecto.fecha_inicio;
+        valoresInsert[3] = nuevoProyecto.fecha_fin;
+        valoresInsert[4] = montoStr; // monto como string
+        valoresInsert[5] = nuevoProyecto.ubicacion;
+        valoresInsert[6] = (strlen(nuevoProyecto.descripcion) > 0) ? nuevoProyecto.descripcion : NULL; //se envia null si está vacío
+        valoresInsert[7] = prioridadStr;
+        valoresInsert[8] = idSupervisorStr;
+
+        resultado = PQexecParams(conn, consultaInsert, 9, NULL, valoresInsert, NULL, NULL, 0);
+
+        if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+            // error común: id_supervisor no existe, o solicitud_id no existe (raro si update funcionó)
+            fprintf(stderr, "error al insertar en proyecto_aceptado: %s\n", PQerrorMessage(conn));
+            transaccionOk = false; // marcar para rollback
+        } else {
+             printf("Proyecto aceptado creado exitosamente.\n");
+        }
+         PQclear(resultado); // limpiar resultado del insert
+    }
+
+    // --- Finalizar Transacción ---
+    if (transaccionOk) {
+        printf("Confirmando transacción (COMMIT)...\n");
+        resultado = PQexec(conn, "COMMIT");
+        if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+            // error muy grave si commit falla después de operaciones exitosas
+            fprintf(stderr, "¡¡¡ERROR CRÍTICO AL HACER COMMIT!!! %s\n", PQerrorMessage(conn));
+        } else {
+            printf("¡Solicitud aceptada y proyecto creado con éxito!\n");
+        }
+    } else {
+        printf("Revirtiendo transacción (ROLLBACK) debido a errores...\n");
+        resultado = PQexec(conn, "ROLLBACK");
+         if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+            fprintf(stderr, "Error al hacer ROLLBACK: %s\n", PQerrorMessage(conn));
+        } else {
+             printf("Cambios revertidos.\n");
+        }
+    }
+    PQclear(resultado); // limpiar resultado de commit/rollback
+}
