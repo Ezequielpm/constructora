@@ -8,8 +8,13 @@
  */
 PGconn* conectarDB() {
     //en una aplicación real, esto debería leerse de forma segura (variables de entorno, archivo, etc.)
-    const char *infoConexion = "postgresql://postgres:ezequielpm123@127.0.0.1:5432/constructora";
+   // const char *infoConexion = "postgresql://postgres:ezequielpm123@127.0.0.1:5432/constructora";
+    const char *infoConexion = "postgresql://remoto3:postgresql123@instancia1.cp4g0q0us5r7.us-east-2.rds.amazonaws.com:5432/constructora";
 
+    //Conexiones remotas a la bd usando AWS
+    /*const char *infoConexionRemoto1 = "postgresql://remoto1:postgresql123@instancia1.cp4g0q0us5r7.us-east-2.rds.amazonaws.com:5432/constructora";
+    const char *infoConexionRemoto2 = "postgresql://remoto2:postgresql123@instancia1.cp4g0q0us5r7.us-east-2.rds.amazonaws.com:5432/constructora";
+    const char *infoConexionRemoto3 = "postgresql://remoto3:postgresql123@instancia1.cp4g0q0us5r7.us-east-2.rds.amazonaws.com:5432/constructora";*/
     //intentar conectar a la base de datos
     PGconn *nuevaConexion = PQconnectdb(infoConexion);
 

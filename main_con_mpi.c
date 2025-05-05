@@ -70,6 +70,7 @@ void mostrarMenuPrincipal() {
     printf("[6] Salir\n");
     //printf("Seleccione una opción:\n");
     printf("======================================================\n");
+    fflush(stdout);
 }
 
 void mostrarMenuEmpresas() {
@@ -145,9 +146,11 @@ int main(int argc, char *argv[]) {
             //usleep(10000);
             mostrarMenuPrincipal();
             //usleep(10000);
-
             fflush(stdout);
+            fflush(stdin);
             leerEntrada("Seleccione una opción:", opcionStr, sizeof(opcionStr), esNumeroEnteroPositivoValido);
+            fflush(stdout);
+            fflush(stdin);
             opcionSeleccionada = atoi(opcionStr);
 
             if (opcionSeleccionada == 6) { //salir
