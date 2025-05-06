@@ -82,7 +82,7 @@ void mostrarMenuPrincipal() {
     printf("[2] Gestionar Supervisores\n");
     printf("[3] Gestionar Solicitudes de Proyecto\n");
     printf("[4] Gestionar Proyectos Aceptados\n");
-    printf("[5] Generar Reportes (Pendiente)\n");
+    printf("[5] Generar Reportes\n");
     printf("[6] Salir\n");
     printf("======================================================\n");
     fflush(stdout);
@@ -1044,7 +1044,7 @@ void procesarOpcionPrincipal(int opcion, PGconn* conn_rank0, int commSize, int r
                         tFin = MPI_Wtime();
                         //interpretar resultado (simple ACK)
                         if (resultadoRecibido == 0) {
-                            printf("Rank 0: Reporte generado por Rank %d (ver salida del trabajador).\n", rankTrabajador);
+                            printf("Rank 0: Reporte generado por Rank %d.\n", rankTrabajador);
                         } else {
                             printf("Rank 0: Rank %d reportó un ERROR al generar el reporte.\n", rankTrabajador);
                         }
