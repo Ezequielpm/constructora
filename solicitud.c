@@ -64,7 +64,7 @@ void registrarSolicitud(PGconn *conn) {
 }
 
 /**
- * @brief Muestra solicitudes filtradas por estado.
+ * @brief Muestra solicitudes filtradas por estado (Pide input al usuario).
  */
 void mostrarSolicitudesPorEstado(PGconn *conn) {
     if (conn == NULL) {
@@ -92,44 +92,8 @@ void mostrarSolicitudesPorEstado(PGconn *conn) {
             return;
     }
 
-    //consulta con JOIN para obtener el nombre de la empresa
-    const char *consulta = "SELECT s.id, s.fecha_solicitud, s.folio, s.presupuesto, s.anticipo, s.estado, e.nombre AS nombre_empresa, s.razon_cancelacion "
-                           "FROM solicitud_proyecto s "
-                           "JOIN empresas e ON s.empresa_id = e.id "
-                           "WHERE s.estado = $1 ORDER BY s.id;";
-    const char *valores[1];
-    valores[0] = estadoFiltro;
-
-    PGresult *resultado = PQexecParams(conn, consulta, 1, NULL, valores, NULL, NULL, 0);
-
-    if (PQresultStatus(resultado) != PGRES_TUPLES_OK) {
-        fprintf(stderr, "Error al consultar solicitudes: %s\n", PQerrorMessage(conn));
-        PQclear(resultado);
-        return;
-    }
-
-    int numFilas = PQntuples(resultado);
-    printf("\n--- Solicitudes con Estado: %s (%d) ---\n", estadoFiltro, numFilas);
-    printf("| %-4s | %-10s | %-15s | %-15s | %-15s | %-10s | %-25s | %-30s |\n",
-           "ID", "Fecha Sol.", "Folio", "Presupuesto", "Anticipo", "Estado", "Empresa", "Razón Cancelación");
-    printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
-
-    for (int fila = 0; fila < numFilas; fila++) {
-        const char* razon = PQgetisnull(resultado, fila, 7) ? "" : PQgetvalue(resultado, fila, 7); // Manejar NULL para razón
-        printf("| %-4s | %-10s | %-15s | %-15s | %-15s | %-10s | %-25s | %-30s |\n",
-               PQgetvalue(resultado, fila, 0), // id
-               PQgetvalue(resultado, fila, 1), // fecha_solicitud
-               PQgetvalue(resultado, fila, 2), // folio
-               PQgetvalue(resultado, fila, 3), // presupuesto
-               PQgetvalue(resultado, fila, 4), // anticipo
-               PQgetvalue(resultado, fila, 5), // estado
-               PQgetvalue(resultado, fila, 6), // nombre_empresa
-               razon //razon_cancelacion (puede ser vacio)
-              );
-    }
-    printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
-
-    PQclear(resultado);
+    // Llamar a la función que realmente hace la consulta y muestra
+    ejecutarMostrarSolicitudesPorEstadoDB(conn, estadoFiltro);
 }
 
 /**
@@ -381,4 +345,239 @@ void aceptarSolicitud(PGconn *conn) {
         }
     }
     PQclear(resultado); // limpiar resultado de commit/rollback
+}
+
+
+
+
+
+// --------------------------------------------------------------------
+// --- Funciones Ejecutoras de BD para Trabajadores MPI ---
+// --------------------------------------------------------------------
+
+/**
+ * @brief Ejecuta la inserción de una nueva solicitud en la BD.
+ */
+int ejecutarRegistrarSolicitudDB(PGconn *conn, const char *idEmpresaStr, const char *fechaSolicitud,
+                                 const char *presupuestoStr, const char *anticipoStr, const char *folio) {
+    if (conn == NULL || idEmpresaStr == NULL || fechaSolicitud == NULL || presupuestoStr == NULL || anticipoStr == NULL || folio == NULL) {
+        fprintf(stderr, "Rank Worker (ejecutarRegistrarSolicitudDB): Conexión o datos nulos.\n");
+        return -1;
+    }
+
+    const char *consulta = "INSERT INTO solicitud_proyecto "
+                           "(empresa_id, fecha_solicitud, presupuesto, anticipo, folio, estado) "
+                           "VALUES ($1, $2, $3, $4, $5, 'APERTURADO');";
+    const char *valores[5];
+    valores[0] = idEmpresaStr;
+    valores[1] = fechaSolicitud;
+    valores[2] = presupuestoStr; // Se inserta como string, PG lo convierte a NUMERIC
+    valores[3] = anticipoStr;   // Se inserta como string, PG lo convierte a NUMERIC
+    valores[4] = folio;
+
+    PGresult *resultado = PQexecParams(conn, consulta, 5, NULL, valores, NULL, NULL, 0);
+    int estadoFinal = 0; // Asumimos éxito
+
+    if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+        // Error común: empresa_id no existe (violación de Foreign Key) o folio duplicado
+        fprintf(stderr, "Rank Worker BD Error (ejecutarRegistrarSolicitudDB): %s\n", PQerrorMessage(conn));
+        estadoFinal = -1; // Indica error de BD
+    }
+
+    PQclear(resultado);
+    return estadoFinal;
+}
+
+
+/**
+ * @brief Ejecuta la consulta y muestra las solicitudes filtradas por estado.
+ */
+int ejecutarMostrarSolicitudesPorEstadoDB(PGconn *conn, const char *estadoFiltro) {
+     if (conn == NULL || estadoFiltro == NULL) {
+        fprintf(stderr, "Rank Worker (ejecutarMostrarSolicitudesPorEstadoDB): Conexión o estado nulo.\n");
+        return -1;
+    }
+
+    // Consulta con JOIN para obtener el nombre de la empresa
+    const char *consulta = "SELECT s.id, s.fecha_solicitud, s.folio, s.presupuesto, s.anticipo, s.estado, e.nombre AS nombre_empresa, s.razon_cancelacion "
+                           "FROM solicitud_proyecto s "
+                           "JOIN empresas e ON s.empresa_id = e.id "
+                           "WHERE s.estado = $1 ORDER BY s.id;";
+    const char *valores[1];
+    valores[0] = estadoFiltro;
+
+    PGresult *resultado = PQexecParams(conn, consulta, 1, NULL, valores, NULL, NULL, 0);
+
+    if (PQresultStatus(resultado) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "Rank Worker BD Error (ejecutarMostrarSolicitudesPorEstadoDB): %s\n", PQerrorMessage(conn));
+        PQclear(resultado);
+        return -1; // Error de BD
+    }
+
+    int numFilas = PQntuples(resultado);
+    printf("\n--- Solicitudes con Estado: %s (%d) --- (Reportado por Rank Worker)\n", estadoFiltro, numFilas);
+    printf("| %-4s | %-10s | %-15s | %-15s | %-15s | %-10s | %-25s | %-30s |\n",
+           "ID", "Fecha Sol.", "Folio", "Presupuesto", "Anticipo", "Estado", "Empresa", "Razón Cancelación");
+    printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
+
+    if (numFilas == 0) {
+        printf("| %-141s |\n", "No se encontraron solicitudes con este estado.");
+    } else {
+        for (int fila = 0; fila < numFilas; fila++) {
+            const char* razon = PQgetisnull(resultado, fila, 7) ? "" : PQgetvalue(resultado, fila, 7); // Manejar NULL para razón
+            printf("| %-4s | %-10s | %-15s | %-15s | %-15s | %-10s | %-25s | %-30s |\n",
+                   PQgetvalue(resultado, fila, 0), // id
+                   PQgetvalue(resultado, fila, 1), // fecha_solicitud
+                   PQgetvalue(resultado, fila, 2), // folio
+                   PQgetvalue(resultado, fila, 3), // presupuesto
+                   PQgetvalue(resultado, fila, 4), // anticipo
+                   PQgetvalue(resultado, fila, 5), // estado
+                   PQgetvalue(resultado, fila, 6), // nombre_empresa
+                   razon //razon_cancelacion (puede ser vacio)
+                  );
+        }
+    }
+    printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
+
+    PQclear(resultado);
+    return 0; // Éxito en la ejecución de la consulta y muestra
+}
+
+
+/**
+ * @brief Ejecuta la cancelación de una solicitud en la BD.
+ */
+int ejecutarCancelarSolicitudDB(PGconn *conn, const char *idSolicitud, const char *razonCancelacion) {
+    if (conn == NULL || idSolicitud == NULL || razonCancelacion == NULL) {
+        fprintf(stderr, "Rank Worker (ejecutarCancelarSolicitudDB): Conexión o datos nulos.\n");
+        return -1;
+    }
+
+    // Preparar consulta UPDATE (solo si está APERTURADO)
+    const char *consultaUpdate = "UPDATE solicitud_proyecto SET estado = 'CANCELADO', razon_cancelacion = $1 "
+                                 "WHERE id = $2 AND estado = 'APERTURADO';";
+    const char *valoresUpdate[2];
+    valoresUpdate[0] = razonCancelacion;
+    valoresUpdate[1] = idSolicitud;
+
+    PGresult *resultadoUpdate = PQexecParams(conn, consultaUpdate, 2, NULL, valoresUpdate, NULL, NULL, 0);
+    int estadoFinal = 0;
+
+    if (PQresultStatus(resultadoUpdate) == PGRES_COMMAND_OK) {
+        char *filasAfectadasStr = PQcmdTuples(resultadoUpdate);
+        if (filasAfectadasStr != NULL && strcmp(filasAfectadasStr, "1") == 0) {
+            estadoFinal = 0; // Éxito, 1 fila afectada
+        } else {
+            // ID no existe o no estaba 'APERTURADO'
+            estadoFinal = -2; // Éxito en ejecución, pero 0 filas afectadas
+        }
+    } else {
+        fprintf(stderr, "Rank Worker BD Error (ejecutarCancelarSolicitudDB): %s\n", PQerrorMessage(conn));
+        estadoFinal = -1; // Error de BD
+    }
+
+    PQclear(resultadoUpdate);
+    return estadoFinal;
+}
+
+
+/**
+ * @brief Ejecuta la aceptación de una solicitud y creación del proyecto en la BD (transacción).
+ */
+int ejecutarAceptarSolicitudDB(PGconn *conn, const char *idSolicitud,
+                               const ProyectoAceptado *datosProyecto, const char *montoStr,
+                               const char *idSupervisorStr, const char *prioridadStr) {
+
+    if (conn == NULL || idSolicitud == NULL || datosProyecto == NULL || montoStr == NULL || idSupervisorStr == NULL || prioridadStr == NULL) {
+         fprintf(stderr, "Rank Worker (ejecutarAceptarSolicitudDB): Conexión o datos nulos.\n");
+        return -1;
+    }
+
+    PGresult *resultado = NULL;
+    bool transaccionOk = true;
+    int estadoFinal = 0; // 0 = OK, -1 = Error BD, -2 = Solicitud no actualizada
+
+    // --- Inicio de la Transacción ---
+    resultado = PQexec(conn, "BEGIN");
+    if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "Rank Worker BD Error (ejecutarAceptarSolicitudDB - BEGIN): %s\n", PQerrorMessage(conn));
+        PQclear(resultado);
+        return -1; // No se puede iniciar transacción
+    }
+    PQclear(resultado); // Limpiar resultado de BEGIN
+
+    // --- Paso 1: Actualizar Solicitud ---
+    const char *consultaUpdate = "UPDATE solicitud_proyecto SET estado = 'ACEPTADO' "
+                                 "WHERE id = $1 AND estado = 'APERTURADO';";
+    const char *valoresUpdate[1] = {idSolicitud};
+
+    resultado = PQexecParams(conn, consultaUpdate, 1, NULL, valoresUpdate, NULL, NULL, 0);
+
+    if (PQresultStatus(resultado) == PGRES_COMMAND_OK) {
+        char *filasAfectadasStr = PQcmdTuples(resultado);
+        if (filasAfectadasStr == NULL || strcmp(filasAfectadasStr, "1") != 0) {
+            // ID no encontrado o no estaba 'APERTURADO'
+            transaccionOk = false;
+            estadoFinal = -2; // Indicar que la solicitud no se pudo actualizar
+        }
+        // Si se actualizó 1 fila, transaccionOk sigue true y estadoFinal 0
+    } else {
+        fprintf(stderr, "Rank Worker BD Error (ejecutarAceptarSolicitudDB - UPDATE): %s\n", PQerrorMessage(conn));
+        transaccionOk = false;
+        estadoFinal = -1; // Error de BD
+    }
+    PQclear(resultado); // Limpiar resultado del UPDATE
+
+    // --- Paso 2: Insertar Proyecto Aceptado (solo si el UPDATE fue bien) ---
+    if (transaccionOk) {
+        const char *consultaInsert = "INSERT INTO proyecto_aceptado "
+                                     "(solicitud_id, nombre_proyecto, fecha_inicio, fecha_fin, monto, "
+                                     "estatus, porcentaje_avance, ubicacion, descripcion, prioridad, id_supervisor) "
+                                     "VALUES ($1, $2, $3, $4, $5, 'EN_PROCESO', 0.00, $6, $7, $8, $9);";
+        //son 9 parametros
+        const char *valoresInsert[9];
+        valoresInsert[0] = idSolicitud;
+        valoresInsert[1] = datosProyecto->nombre_proyecto;
+        valoresInsert[2] = datosProyecto->fecha_inicio;
+        valoresInsert[3] = datosProyecto->fecha_fin;
+        valoresInsert[4] = montoStr; // Monto como string
+        valoresInsert[5] = datosProyecto->ubicacion;
+        // Enviar NULL si la descripción está vacía
+        valoresInsert[6] = (strlen(datosProyecto->descripcion) > 0) ? datosProyecto->descripcion : NULL;
+        valoresInsert[7] = prioridadStr;
+        valoresInsert[8] = idSupervisorStr;
+
+        resultado = PQexecParams(conn, consultaInsert, 9, NULL, valoresInsert, NULL, NULL, 0);
+
+        if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+            // Error común: id_supervisor no existe, o solicitud_id duplicado (raro si update funcionó bien)
+            fprintf(stderr, "Rank Worker BD Error (ejecutarAceptarSolicitudDB - INSERT): %s\n", PQerrorMessage(conn));
+            transaccionOk = false;
+            estadoFinal = -1; // Error de BD
+        }
+        // Si el INSERT fue OK, transaccionOk sigue true y estadoFinal 0
+         PQclear(resultado); // Limpiar resultado del INSERT
+    }
+
+    // --- Finalizar Transacción ---
+    if (transaccionOk) {
+        // printf("Rank Worker: Confirmando transacción (COMMIT)...\n"); //debug
+        resultado = PQexec(conn, "COMMIT");
+        if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+            fprintf(stderr, "Rank Worker BD Error CRÍTICO (ejecutarAceptarSolicitudDB - COMMIT): %s\n", PQerrorMessage(conn));
+            estadoFinal = -1; // Error crítico al hacer COMMIT
+        }
+        // Si COMMIT OK, estadoFinal ya es 0
+    } else {
+        // printf("Rank Worker: Revirtiendo transacción (ROLLBACK)...\n"); //debug
+        resultado = PQexec(conn, "ROLLBACK");
+         if (PQresultStatus(resultado) != PGRES_COMMAND_OK) {
+            //error al hacer ROLLBACK, pero la transacción ya falló antes
+            fprintf(stderr, "Rank Worker BD Error (ejecutarAceptarSolicitudDB - ROLLBACK): %s\n", PQerrorMessage(conn));
+            //mantenemos el estadoFinal que causó el rollback (-1 o -2)
+        }
+    }
+    PQclear(resultado); // Limpiar resultado de COMMIT/ROLLBACK
+
+    return estadoFinal;
 }

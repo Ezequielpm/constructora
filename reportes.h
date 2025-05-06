@@ -3,11 +3,14 @@
 
 #include <libpq-fe.h> //para pgconn
 
+
 /**
  * @brief Genera y muestra el reporte de proyectos aceptados dentro de un rango de fechas de inicio.
  * @param conn Puntero a la conexión activa de postgresql.
+ * @param fechaInicioStr Fecha de inicio del periodo (formato YYYY-MM-DD).
+ * @param fechaFinStr Fecha de fin del periodo (formato YYYY-MM-DD).
  */
-void reporteProyectosPorPeriodo(PGconn *conn);
+void reporteProyectosPorPeriodo(PGconn *conn, const char *fechaInicioStr, const char *fechaFinStr); // <-- Firma modificada
 
 /**
  * @brief Genera y muestra el reporte de proyectos con un avance superior al 50%.

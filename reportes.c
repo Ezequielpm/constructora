@@ -15,29 +15,34 @@ void imprimirEncabezadoSimple(const char* tituloReporte) {
 
 /**
  * @brief Reporte de proyectos aceptados por periodo.
+ * (Modificado para recibir fechas como parámetros)
  */
-void reporteProyectosPorPeriodo(PGconn *conn) {
+void reporteProyectosPorPeriodo(PGconn *conn, const char *fechaInicioStr, const char *fechaFinStr) { 
     if (conn == NULL) {
-        fprintf(stderr, "error (reporteproyectosporperiodo): conexión a bd no válida.\n");
+        fprintf(stderr, "error (reporteProyectosPorPeriodo): conexión a bd no válida.\n");
+        return;
+    }
+     if (fechaInicioStr == NULL || fechaFinStr == NULL) {
+        fprintf(stderr, "error (reporteProyectosPorPeriodo): Fechas de inicio o fin nulas.\n");
         return;
     }
 
-    char fechaInicioStr[11]; // yyyy-mm-dd
-    char fechaFinStr[11];
-
+    //ya no se lee la entrada aquí, se usan los parámetros
+    // char fechaInicioStr[11]; // YYYY-MM-DD
+    // char fechaFinStr[11];
     imprimirEncabezadoSimple("Proyectos Aceptados por Periodo");
-
-    leerEntrada("Ingrese Fecha de Inicio (YYYY-MM-DD):", fechaInicioStr, sizeof(fechaInicioStr), esFechaValida);
-    leerEntrada("Ingrese Fecha de Fin (YYYY-MM-DD):", fechaFinStr, sizeof(fechaFinStr), esFechaValida);
+    // leerEntrada("Ingrese Fecha de Inicio (YYYY-MM-DD):", fechaInicioStr, sizeof(fechaInicioStr), esFechaValida); 
+    // leerEntrada("Ingrese Fecha de Fin (YYYY-MM-DD):", fechaFinStr, sizeof(fechaFinStr), esFechaValida);      
 
     const char *consulta =
         "SELECT p.id, p.nombre_proyecto, p.fecha_inicio, p.fecha_fin, p.estatus, e.nombre AS nombre_empresa "
         "FROM proyecto_aceptado p "
         "JOIN solicitud_proyecto sp ON p.solicitud_id = sp.id "
         "JOIN empresas e ON sp.empresa_id = e.id "
-        "WHERE p.fecha_inicio BETWEEN $1 AND $2 "
+        "WHERE p.fecha_inicio BETWEEN $1 AND $2 " 
         "ORDER BY p.fecha_inicio, p.id;";
 
+    //los valores ahora vienen de los parámetros de la función
     const char *valores[2] = {fechaInicioStr, fechaFinStr};
     PGresult *resultado = PQexecParams(conn, consulta, 2, NULL, valores, NULL, NULL, 0);
 
@@ -54,7 +59,7 @@ void reporteProyectosPorPeriodo(PGconn *conn) {
     printf("--------------------------------------------------------------------------------------------------\n");
 
     if (numFilas == 0) {
-         printf("|                      No se encontraron proyectos en este periodo.                         |\n");
+         printf("| %-96s |\n", "No se encontraron proyectos en este periodo.");
     } else {
         for (int i = 0; i < numFilas; i++) {
             printf("| %-4s | %-30s | %-10s | %-10s | %-10s | %-25s |\n",
